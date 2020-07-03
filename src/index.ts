@@ -96,7 +96,7 @@ export async function initThreadPool<T extends Callback>(...funcs: T[]) {
     fns[0]()
     // fns[1]()
   
-    parentPort?.on("message", (val) => {
+    parentPort.on("message", (val) => {
         switch(val.type) {
             case "call": {
                 const data = ${funcs[0].name}(...val.args);
@@ -147,8 +147,6 @@ export async function initThreadPool<T extends Callback>(...funcs: T[]) {
       myWorker.on('message', cleanup);
     });
   }
-
-  asyncWorkerStub.kill = function() {};
 
   /**
    * don't forget to keep track of thread ids!
