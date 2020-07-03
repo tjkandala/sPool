@@ -38,150 +38,6 @@ type Callback = (...args: any) => any;
 
 let alreadyPooled = false;
 
-/**
- *
- * thread pool init should return the worker creation function!!
- * this is a better design choice because the worker fn depends on
- * the existence of + reference to the thread pool!
- *
- * The "worker factory" returns "client stub" functions
- *
- * TODO: look into passing variadic amount of functions. each function is given an
- * id at create time. generate wrapper functions which send messages to a worker with
- * function id and args!
- *
- * @param fn
- * @param threads
- */
-
-export async function ipt<T extends Callback>(...funcs: T[]) {
-  if (alreadyPooled) {
-    const err = new Error('A thread pool already exists!');
-    err.name = 'MultipleThreadPoolError';
-    throw err;
-  }
-
-  alreadyPooled = true;
-
-  // this is a 2-core/4-thread processor, cpus().length is returning 4
-  // seems it is accounting for hyperthreading
-  const threads = cpus().length;
-
-  const idleWorkers: Worker[] = [];
-  const activeWorkers: Worker[] = [];
-
-  // create string of array of fns
-  const funcString = funcs[0].toString();
-
-  let fnsString = '[';
-  for (let i = 0; i < funcs.length; i++) {
-    fnsString += funcs[i].toString();
-    fnsString += ',';
-  }
-  fnsString += ']';
-
-  console.log(fnsString);
-
-  const workerScript = `
-    const {parentPort} = require("worker_threads");
-
-    ${funcString}
-
-    const fns = ${fnsString}
-    fns[0]()
-    // fns[1]()
-  
-    parentPort.on("message", (val) => {
-        switch(val.type) {
-            case "call": {
-                const data = ${funcs[0].name}(...val.args);
-                parentPort?.postMessage({ status: "received", data });
-                break;
-            }
-
-            case "replaceFunc": {
-                console.log("repl")
-                break;
-            }
-        }
-    });
-    `;
-
-  for (let i = 0; i < threads; i++) {
-    idleWorkers.push(
-      new Worker(workerScript, {
-        eval: true,
-      })
-    );
-  }
-
-  const invocationQueue: any[] = [];
-
-  async function asyncWorkerStub(...args: Parameters<T>) {
-    const myWorker = idleWorkers[0];
-    myWorker.postMessage({
-      type: 'replaceFunc',
-    });
-
-    invocationQueue.push(['func0', args]);
-    console.log(invocationQueue);
-
-    myWorker.postMessage({
-      type: 'call',
-      args,
-    });
-
-    return new Promise<ReturnType<T>>(resolve => {
-      function cleanup(val: { status: string; data: ReturnType<T> }) {
-        if (val && val.status === 'received') {
-          resolve(val.data);
-          myWorker.off('message', cleanup);
-        }
-      }
-
-      myWorker.on('message', cleanup);
-    });
-  }
-
-  /**
-   * don't forget to keep track of thread ids!
-   *
-   *
-   * also, functions should be associated with an id by reference (map/weakmap?).
-   * when the stub for an id is called, send "call" message to a worker along with
-   * stringified function and args!
-   *
-   * make a module-global variable to keep track of whether a thread pool has been
-   * created already! throw exception if user tries to create multiple thread pools (that makes no sense, bad for perf)
-   */
-
-  /**
-   * returning worker function and "handle interface" as separate elements
-   * of a tuple for easy passing-around of function!
-   */
-
-  const handle = {
-    kill() {
-      for (let i = 0; i < idleWorkers.length; i++) {
-        idleWorkers[i].terminate();
-      }
-      for (let i = 0; i < activeWorkers.length; i++) {
-        activeWorkers[i].terminate();
-      }
-    },
-    log() {},
-  };
-
-  return new Promise<[typeof handle, typeof asyncWorkerStub]>(async res => {
-    res([handle, asyncWorkerStub]);
-  });
-}
-
-/**
- * TODO
- */
-// class Queue<T> {}
-
 type AsyncWorkerStub<T extends Callback> = {
   (...args: Parameters<T>): Promise<ReturnType<T>>;
   // kill: string;
@@ -342,6 +198,19 @@ export async function initThreadPool<T extends [...Callback[]]>(...funcs: T) {
       return function workerized(
         ...args: Parameters<typeof cb>
       ): Promise<ReturnType<typeof cb>> {
+        const myWorker = idleWorkers[0];
+        myWorker.postMessage({
+          type: 'replaceFunc',
+        });
+
+        invocationQueue.push(['func0', args]);
+        console.log(invocationQueue);
+
+        myWorker.postMessage({
+          type: 'call',
+          args,
+        });
+
         return new Promise<ReturnType<typeof cb>>(res => {
           console.log(args);
           res();
@@ -350,6 +219,11 @@ export async function initThreadPool<T extends [...Callback[]]>(...funcs: T) {
     }),
   ];
 }
+
+/**
+ * TODO
+ */
+// class Queue<T> {}
 
 function one(cat: string) {
   return 'hi ' + cat;
@@ -364,6 +238,10 @@ async function main() {
   const [handle, first, second, third] = await initThreadPool(one, two, one);
 
   first('tj');
+  second();
+  third('tj');
 
   handle.kill();
 }
+
+main();
