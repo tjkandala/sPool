@@ -13,4 +13,8 @@ describe('initThreadPool', () => {
     expect(true).toEqual(true);
     handle.kill();
   });
+
+  it('throws error when called multiple times', () => {
+    expect(true).toBe(true);
+  });
 });

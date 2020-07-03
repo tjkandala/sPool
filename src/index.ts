@@ -54,7 +54,7 @@ let alreadyPooled = false;
  * @param threads
  */
 
-export async function initThreadPool<T extends Callback>(...funcs: T[]) {
+export async function ipt<T extends Callback>(...funcs: T[]) {
   if (alreadyPooled) {
     const err = new Error('A thread pool already exists!');
     err.name = 'MultipleThreadPoolError';
@@ -187,58 +187,163 @@ type AsyncWorkerStub<T extends Callback> = {
   // kill: string;
 };
 
+interface Handle {
+  /** Terminates all worker threads */
+  kill: () => void;
+  log: () => void;
+}
+
 // mapped tuple types didn't really work out
-function tupleInference<T extends [Callback]>(
-  ...args: T
-): [AsyncWorkerStub<T[0]>];
-function tupleInference<T extends [Callback, Callback]>(
-  ...args: T
-): [AsyncWorkerStub<T[0]>, AsyncWorkerStub<T[1]>];
-function tupleInference<T extends [Callback, Callback, Callback]>(
-  ...args: T
-): [AsyncWorkerStub<T[0]>, AsyncWorkerStub<T[1]>, AsyncWorkerStub<T[2]>];
-function tupleInference<T extends [Callback, Callback, Callback, Callback]>(
-  ...args: T
-): [
-  AsyncWorkerStub<T[0]>,
-  AsyncWorkerStub<T[1]>,
-  AsyncWorkerStub<T[2]>,
-  AsyncWorkerStub<T[3]>
-];
-function tupleInference<
+export async function initThreadPool<T extends [Callback]>(
+  ...funcs: T
+): Promise<[Handle, AsyncWorkerStub<T[0]>]>;
+export async function initThreadPool<T extends [Callback, Callback]>(
+  ...funcs: T
+): Promise<[Handle, AsyncWorkerStub<T[0]>, AsyncWorkerStub<T[1]>]>;
+export async function initThreadPool<T extends [Callback, Callback, Callback]>(
+  ...funcs: T
+): Promise<
+  [Handle, AsyncWorkerStub<T[0]>, AsyncWorkerStub<T[1]>, AsyncWorkerStub<T[2]>]
+>;
+export async function initThreadPool<
+  T extends [Callback, Callback, Callback, Callback]
+>(
+  ...funcs: T
+): Promise<
+  [
+    Handle,
+    AsyncWorkerStub<T[0]>,
+    AsyncWorkerStub<T[1]>,
+    AsyncWorkerStub<T[2]>,
+    AsyncWorkerStub<T[3]>
+  ]
+>;
+export async function initThreadPool<
   T extends [Callback, Callback, Callback, Callback, Callback]
 >(
-  ...args: T
-): [
-  AsyncWorkerStub<T[0]>,
-  AsyncWorkerStub<T[1]>,
-  AsyncWorkerStub<T[2]>,
-  AsyncWorkerStub<T[3]>,
-  AsyncWorkerStub<T[4]>
-];
-function tupleInference<
+  ...funcs: T
+): Promise<
+  [
+    Handle,
+    AsyncWorkerStub<T[0]>,
+    AsyncWorkerStub<T[1]>,
+    AsyncWorkerStub<T[2]>,
+    AsyncWorkerStub<T[3]>,
+    AsyncWorkerStub<T[4]>
+  ]
+>;
+export async function initThreadPool<
   T extends [Callback, Callback, Callback, Callback, Callback, Callback]
 >(
-  ...args: T
-): [
-  AsyncWorkerStub<T[0]>,
-  AsyncWorkerStub<T[1]>,
-  AsyncWorkerStub<T[2]>,
-  AsyncWorkerStub<T[3]>,
-  AsyncWorkerStub<T[4]>,
-  AsyncWorkerStub<T[5]>
-];
-function tupleInference<T extends [...Callback[]]>(...args: T) {
-  return args.map(cb => {
-    return function workerized(
-      ...args: Parameters<typeof cb>
-    ): Promise<ReturnType<typeof cb>> {
-      return new Promise<ReturnType<typeof cb>>(res => {
-        console.log(args);
-        res();
-      });
-    };
-  });
+  ...funcs: T
+): Promise<
+  [
+    Handle,
+    AsyncWorkerStub<T[0]>,
+    AsyncWorkerStub<T[1]>,
+    AsyncWorkerStub<T[2]>,
+    AsyncWorkerStub<T[3]>,
+    AsyncWorkerStub<T[4]>,
+    AsyncWorkerStub<T[5]>
+  ]
+>;
+export async function initThreadPool<T extends [...Callback[]]>(...funcs: T) {
+  if (alreadyPooled) {
+    const err = new Error('A thread pool already exists!');
+    err.name = 'MultipleThreadPoolError';
+    throw err;
+  }
+
+  // module global variable to prevent creation of multiple thread pools
+  alreadyPooled = true;
+
+  // this is a 2-core/4-thread processor, cpus().length is returning 4
+  // seems it is accounting for hyperthreading
+  const threads = cpus().length;
+
+  const idleWorkers: Worker[] = [];
+  const activeWorkers: Worker[] = [];
+
+  // create string of array of fns
+  const funcString = funcs[0].toString();
+
+  let fnsString = '[';
+  for (let i = 0; i < funcs.length; i++) {
+    fnsString += funcs[i].toString();
+    fnsString += ',';
+  }
+  fnsString += ']';
+
+  console.log(fnsString);
+
+  const workerScript = `
+    const {parentPort} = require("worker_threads");
+
+    ${funcString}
+
+    const fns = ${fnsString}
+    fns[0]()
+    // fns[1]()
+  
+    parentPort.on("message", (val) => {
+        switch(val.type) {
+            case "call": {
+                const data = ${funcs[0].name}(...val.args);
+                parentPort?.postMessage({ status: "received", data });
+                break;
+            }
+
+            case "replaceFunc": {
+                console.log("repl")
+                break;
+            }
+        }
+    });
+    `;
+
+  for (let i = 0; i < threads; i++) {
+    idleWorkers.push(
+      new Worker(workerScript, {
+        eval: true,
+      })
+    );
+  }
+
+  const invocationQueue: any[] = [];
+
+  const handle: Handle = {
+    kill() {
+      for (let i = 0; i < idleWorkers.length; i++) {
+        idleWorkers[i].terminate();
+      }
+      for (let i = 0; i < activeWorkers.length; i++) {
+        activeWorkers[i].terminate();
+      }
+    },
+    log() {},
+  };
+
+  return [
+    handle,
+    ...funcs.map(cb => {
+      /**
+       * 'client stub' of passed in function.
+       *
+       * on invocation:
+       * 1)
+       * 2)
+       * 3)
+       */
+      return function workerized(
+        ...args: Parameters<typeof cb>
+      ): Promise<ReturnType<typeof cb>> {
+        return new Promise<ReturnType<typeof cb>>(res => {
+          console.log(args);
+          res();
+        });
+      };
+    }),
+  ];
 }
 
 function one(cat: string) {
@@ -249,7 +354,11 @@ function two() {
   return 22;
 }
 
-// TODO: find the types that make this work
-const [first, second, third] = tupleInference(one, two, one);
+async function main() {
+  // TODO: find the types that make this work
+  const [handle, first, second, third] = await initThreadPool(one, two, one);
 
-first('tj');
+  first('tj');
+
+  handle.kill();
+}
