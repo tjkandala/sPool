@@ -4,18 +4,10 @@ import { cpus } from 'os';
 /*
  * sPool library: Easy Type-Safe Worker Thread Pools
  *
- * attempt at finding a good API for an abstraction
- * layer over Node.js workers.
- *
- * after, implement thread pooling
- *
- * two parts to this library:
- *  1) promisifying functions for worker threads
- *  2) easy thread pools for those functions
  *
  * TODOs:
  * - make it isomorphic! (compat w Web Workers & Node.js Workers)? optional
- * - benchmark against single-threaded versions
+ * - benchmark against single-threaded impls
  * - error handling (check stack trace)
  * - abortable
  * - use SharedArrayBuffer!
@@ -42,10 +34,10 @@ import { cpus } from 'os';
  * about RegeneratorRuntime
  */
 
-type AsyncWorkerStub<T extends Callback> = {
-  (...args: Parameters<T>): Promise<ReturnType<T>>;
-  kill: string;
-};
+// type AsyncWorkerStub<T extends Callback> = {
+//   (...args: Parameters<T>): Promise<ReturnType<T>>;
+//   kill: string;
+// };
 
 type Callback = (...args: any) => any;
 
@@ -81,7 +73,7 @@ export async function initThreadPool<T extends Callback>(...funcs: T[]) {
   const threads = cpus().length;
 
   const idleWorkers: Worker[] = [];
-  const activeWorkers: Worker[] = [];
+  // const activeWorkers: Worker[] = [];
 
   // create string of array of fns
   const funcString = funcs[0].toString();
