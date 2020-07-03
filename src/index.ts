@@ -127,8 +127,6 @@ export async function initThreadPool<T extends [...Callback[]]>(...funcs: T) {
   const activeWorkers: Worker[] = [];
 
   // create string of array of fns
-  const funcString = funcs[0].toString();
-
   let fnsString = '[';
   for (let i = 0; i < funcs.length; i++) {
     fnsString += funcs[i].toString();
@@ -140,8 +138,6 @@ export async function initThreadPool<T extends [...Callback[]]>(...funcs: T) {
 
   const workerScript = `
     const {parentPort} = require("worker_threads");
-
-    ${funcString}
 
     const fns = ${fnsString}
     fns[0]()
@@ -180,6 +176,8 @@ export async function initThreadPool<T extends [...Callback[]]>(...funcs: T) {
       for (let i = 0; i < activeWorkers.length; i++) {
         activeWorkers[i].terminate();
       }
+      // allow the user to create another thread pool now
+      alreadyPooled = false;
     },
     log() {},
   };
@@ -191,7 +189,7 @@ export async function initThreadPool<T extends [...Callback[]]>(...funcs: T) {
        * 'client stub' of passed in function.
        *
        * on invocation:
-       * 1)
+       * 1) add a tuple of function index and args to invocation queue
        * 2)
        * 3)
        */
@@ -224,24 +222,3 @@ export async function initThreadPool<T extends [...Callback[]]>(...funcs: T) {
  * TODO
  */
 // class Queue<T> {}
-
-function one(cat: string) {
-  return 'hi ' + cat;
-}
-
-function two() {
-  return 22;
-}
-
-async function main() {
-  // TODO: find the types that make this work
-  const [handle, first, second, third] = await initThreadPool(one, two, one);
-
-  first('tj');
-  second();
-  third('tj');
-
-  handle.kill();
-}
-
-main();
