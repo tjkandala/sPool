@@ -49,76 +49,6 @@ type AsyncWorkerStub<T extends Callback> = {
 
 type Callback = (...args: any) => any;
 
-/** creates a new sPool worker */
-function typeSafeWorker<T extends Callback>(fn: T): AsyncWorkerStub<T> {
-  const funcString = fn.toString();
-
-  async function asyncWorker(...args: Parameters<T>) {
-    /**
-     * TODO: use a worker from the pool. closure referenced variables are a problem here tho. encourage
-     * explicit "dependency injection"
-     *
-     * e.g.
-     *
-     * const needsDepsFunc = typeSafeWorker(workerFunc);
-     * const wrappedFunc = (nonDepsArg) => neepsDepsFunc(nonDepsArg, dep1, dep2)
-     *
-     * This allows you to use deps from parent thread scope
-     */
-    const myWorker = new Worker(
-      `
-          const {parentPort} = require("worker_threads");
-          ${funcString}
-          
-          parentPort?.on("message", (val) => {
-
-            switch(val.type) {
-                case "call": {
-                    const data = ${fn.name}(...val.args);
-                    parentPort?.postMessage({ status: "received", data });
-                    break;
-                }
-
-                case "replaceFunc": {
-                    break;
-                }
-            }
-          });
-            `,
-      {
-        eval: true,
-      }
-    );
-
-    myWorker.postMessage({
-      type: 'call',
-      args,
-    });
-
-    return new Promise<ReturnType<T>>(resolve => {
-      function cleanup(val: { status: string; data: ReturnType<T> }) {
-        if (val && val.status === 'received') {
-          resolve(val.data);
-          myWorker.off('message', cleanup);
-        }
-      }
-
-      myWorker.on('message', cleanup);
-    });
-  }
-
-  asyncWorker.kill = 'hi';
-
-  return asyncWorker;
-}
-
-function addTwo(first: number, second: number) {
-  console.log(first + second);
-  return first + second;
-}
-
-const coolAddTwo = typeSafeWorker(addTwo);
-
 let alreadyPooled = false;
 
 /**
@@ -137,7 +67,7 @@ let alreadyPooled = false;
  * @param threads
  */
 
-async function initThreadPool<T extends Callback>(...funcs: T[]) {
+export async function initThreadPool<T extends Callback>(...funcs: T[]) {
   if (alreadyPooled) {
     const err = new Error('A thread pool already exists!');
     err.name = 'MultipleThreadPoolError';
@@ -213,15 +143,28 @@ async function initThreadPool<T extends Callback>(...funcs: T[]) {
   };
 
   async function asyncWorkerStub(...args: Parameters<T>) {
-    idleWorkers[0].postMessage({
+    const myWorker = idleWorkers[0];
+    myWorker.postMessage({
       type: 'replaceFunc',
     });
 
     invocationQueue.push(['func0', args]);
     console.log(invocationQueue);
 
-    return new Promise<ReturnType<T>>(res => {
-      res();
+    myWorker.postMessage({
+      type: 'call',
+      args,
+    });
+
+    return new Promise<ReturnType<T>>(resolve => {
+      function cleanup(val: { status: string; data: ReturnType<T> }) {
+        if (val && val.status === 'received') {
+          resolve(val.data);
+          myWorker.off('message', cleanup);
+        }
+      }
+
+      myWorker.on('message', cleanup);
     });
   }
 
@@ -267,29 +210,6 @@ async function initThreadPool<T extends Callback>(...funcs: T[]) {
  * TODO
  */
 // class Queue<T> {}
-
-/**
- * testing
- */
-
-async function main() {
-  for (let i = 0; i < 10; i++) {
-    coolAddTwo(i, i + 1);
-  }
-  await coolAddTwo(20, 22);
-  const resd = await coolAddTwo(100, 1);
-
-  console.log('resd is ' + resd);
-
-  console.log('complete!');
-  //   process.exit();
-
-  const [, wow] = await initThreadPool(addTwo);
-
-  wow(1, 2);
-}
-
-main();
 
 // function tupleInference<T>(...args: T[]) {
 //   return args;
