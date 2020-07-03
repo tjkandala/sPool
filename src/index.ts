@@ -254,6 +254,12 @@ export async function initThreadPool<T extends [...Callback[]]>(...funcs: T) {
     throw err;
   }
 
+  if (funcs.length == 0) {
+    const err = new Error('Thread pool has no functions');
+    err.name = 'InvalidThreadPoolError';
+    throw err;
+  }
+
   // module global variable to prevent creation of multiple thread pools
   alreadyPooled = true;
 
@@ -283,7 +289,6 @@ export async function initThreadPool<T extends [...Callback[]]>(...funcs: T) {
 
     const fns = ${fnsString}
     fns[0]()
-    // fns[1]()
   
     parentPort.on("message", (val) => {
         switch(val.type) {
