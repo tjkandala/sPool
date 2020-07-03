@@ -73,21 +73,14 @@ export async function initThreadPool<T extends Callback>(...funcs: T[]) {
   const threads = cpus().length;
 
   const idleWorkers: Worker[] = [];
-  // const activeWorkers: Worker[] = [];
+  const activeWorkers: Worker[] = [];
 
   // create string of array of fns
   const funcString = funcs[0].toString();
-  const fns: Callback[] = [
-    function() {
-      console.log('an arreee');
-    },
-    function() {
-      console.log('boba two');
-    },
-  ];
+
   let fnsString = '[';
-  for (let i = 0; i < fns.length; i++) {
-    fnsString += fns[i].toString();
+  for (let i = 0; i < funcs.length; i++) {
+    fnsString += funcs[i].toString();
     fnsString += ',';
   }
   fnsString += ']';
@@ -101,7 +94,7 @@ export async function initThreadPool<T extends Callback>(...funcs: T[]) {
 
     const fns = ${fnsString}
     fns[0]()
-    fns[1]()
+    // fns[1]()
   
     parentPort?.on("message", (val) => {
         switch(val.type) {
@@ -129,11 +122,6 @@ export async function initThreadPool<T extends Callback>(...funcs: T[]) {
 
   const invocationQueue: any[] = [];
 
-  const handle = {
-    kill() {},
-    log() {},
-  };
-
   async function asyncWorkerStub(...args: Parameters<T>) {
     const myWorker = idleWorkers[0];
     myWorker.postMessage({
@@ -160,14 +148,7 @@ export async function initThreadPool<T extends Callback>(...funcs: T[]) {
     });
   }
 
-  asyncWorkerStub.kill = 'hi';
-
-  async function* workQueue() {
-    yield 12;
-    yield 'tj';
-  }
-
-  const asyncGenWQ = workQueue();
+  asyncWorkerStub.kill = function() {};
 
   /**
    * don't forget to keep track of thread ids!
@@ -186,14 +167,19 @@ export async function initThreadPool<T extends Callback>(...funcs: T[]) {
    * of a tuple for easy passing-around of function!
    */
 
-  return new Promise<[typeof handle, typeof asyncWorkerStub]>(async res => {
-    /**
-     * kick off work queue, then resolve promise
-     */
-    for await (const val of asyncGenWQ) {
-      console.log(val);
-    }
+  const handle = {
+    kill() {
+      for (let i = 0; i < idleWorkers.length; i++) {
+        idleWorkers[i].terminate();
+      }
+      for (let i = 0; i < activeWorkers.length; i++) {
+        activeWorkers[i].terminate();
+      }
+    },
+    log() {},
+  };
 
+  return new Promise<[typeof handle, typeof asyncWorkerStub]>(async res => {
     res([handle, asyncWorkerStub]);
   });
 }
