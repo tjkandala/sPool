@@ -34,11 +34,6 @@ import { cpus } from 'os';
  * about RegeneratorRuntime
  */
 
-// type AsyncWorkerStub<T extends Callback> = {
-//   (...args: Parameters<T>): Promise<ReturnType<T>>;
-//   kill: string;
-// };
-
 type Callback = (...args: any) => any;
 
 let alreadyPooled = false;
@@ -187,9 +182,74 @@ export async function initThreadPool<T extends Callback>(...funcs: T[]) {
  */
 // class Queue<T> {}
 
-// function tupleInference<T>(...args: T[]) {
-//   return args;
-// }
+type AsyncWorkerStub<T extends Callback> = {
+  (...args: Parameters<T>): Promise<ReturnType<T>>;
+  // kill: string;
+};
+
+// mapped tuple types didn't really work out
+function tupleInference<T extends [Callback]>(
+  ...args: T
+): [AsyncWorkerStub<T[0]>];
+function tupleInference<T extends [Callback, Callback]>(
+  ...args: T
+): [AsyncWorkerStub<T[0]>, AsyncWorkerStub<T[1]>];
+function tupleInference<T extends [Callback, Callback, Callback]>(
+  ...args: T
+): [AsyncWorkerStub<T[0]>, AsyncWorkerStub<T[1]>, AsyncWorkerStub<T[2]>];
+function tupleInference<T extends [Callback, Callback, Callback, Callback]>(
+  ...args: T
+): [
+  AsyncWorkerStub<T[0]>,
+  AsyncWorkerStub<T[1]>,
+  AsyncWorkerStub<T[2]>,
+  AsyncWorkerStub<T[3]>
+];
+function tupleInference<
+  T extends [Callback, Callback, Callback, Callback, Callback]
+>(
+  ...args: T
+): [
+  AsyncWorkerStub<T[0]>,
+  AsyncWorkerStub<T[1]>,
+  AsyncWorkerStub<T[2]>,
+  AsyncWorkerStub<T[3]>,
+  AsyncWorkerStub<T[4]>
+];
+function tupleInference<
+  T extends [Callback, Callback, Callback, Callback, Callback, Callback]
+>(
+  ...args: T
+): [
+  AsyncWorkerStub<T[0]>,
+  AsyncWorkerStub<T[1]>,
+  AsyncWorkerStub<T[2]>,
+  AsyncWorkerStub<T[3]>,
+  AsyncWorkerStub<T[4]>,
+  AsyncWorkerStub<T[5]>
+];
+function tupleInference<T extends [...Callback[]]>(...args: T) {
+  return args.map(cb => {
+    return function workerized(
+      ...args: Parameters<typeof cb>
+    ): Promise<ReturnType<typeof cb>> {
+      return new Promise<ReturnType<typeof cb>>(res => {
+        console.log(args);
+        res();
+      });
+    };
+  });
+}
+
+function one(cat: string) {
+  return 'hi ' + cat;
+}
+
+function two() {
+  return 22;
+}
 
 // TODO: find the types that make this work
-// const [first, second] = tupleInference('tj', 22);
+const [first, second, third] = tupleInference(one, two, one);
+
+first('tj');
