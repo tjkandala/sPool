@@ -1,1 +1,1 @@
-# sPool
+# sPool (README under construction)
