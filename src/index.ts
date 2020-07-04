@@ -224,7 +224,7 @@ export async function initThreadPool<T extends [...Callback[]]>(...funcs: T) {
         idleWorkers.pop()?.terminate();
       }
       while (activeWorkers.length) {
-        activeWorkers.pop()?.terminate;
+        activeWorkers.pop()?.terminate();
       }
       // allow the user to create another thread pool now
       alreadyPooled = false;
