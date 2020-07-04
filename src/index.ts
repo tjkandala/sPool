@@ -176,7 +176,6 @@ export async function initThreadPool<T extends [...Callback[]]>(...funcs: T) {
    */
   function queueTask(task: Task) {
     invocationQueue.push(task);
-    // setTimeout(() => task[2]('tada'), 1500);
     if (idleWorkers.length > 0) {
       threadAvailable();
     }
@@ -184,25 +183,37 @@ export async function initThreadPool<T extends [...Callback[]]>(...funcs: T) {
 
   function threadAvailable() {
     while (invocationQueue.length > 0 && idleWorkers.length > 0) {
-      const task = invocationQueue.shift();
-      if (task) {
-        const nextWorker = idleWorkers.shift();
-        if (nextWorker) {
-          activeWorkers.push(nextWorker);
-          nextWorker.postMessage({
-            type: 'call',
-            fnIndex: task[0],
-            args: task[1],
-          });
+      executeTask();
+    }
+  }
 
-          function cleanup(val: any) {
-            task && task[2](val);
-            nextWorker?.off('message', cleanup);
+  function executeTask() {
+    const task = invocationQueue.shift();
+    if (task) {
+      const thisWorker = idleWorkers.shift();
+      if (thisWorker) {
+        activeWorkers.push(thisWorker);
+        thisWorker.postMessage({
+          type: 'call',
+          fnIndex: task[0],
+          args: task[1],
+        });
+
+        function cleanup(val: any) {
+          // resolve promise
+          task && task[2](val);
+          if (thisWorker) {
+            thisWorker?.off('message', cleanup);
             // move thread, call threadAvailable
+            handle.log();
+            activeWorkers.splice(activeWorkers.indexOf(thisWorker), 1);
+            idleWorkers.push(thisWorker);
+            handle.log();
+            threadAvailable();
           }
-
-          nextWorker.on('message', cleanup);
         }
+
+        thisWorker.on('message', cleanup);
       }
     }
   }
@@ -218,7 +229,13 @@ export async function initThreadPool<T extends [...Callback[]]>(...funcs: T) {
       // allow the user to create another thread pool now
       alreadyPooled = false;
     },
-    log() {},
+    log() {
+      console.dir({
+        idleWorkers,
+        activeWorkers,
+        invocationQueue,
+      });
+    },
   };
 
   return [
