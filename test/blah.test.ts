@@ -12,7 +12,7 @@ describe('initThreadPool', () => {
   }
 
   it('works', async () => {
-    const [handle, workerizedAdd, workerizedSubtract] = await initThreadPool(
+    const [handle, workerizedAdd, workerizedSubtract] = initThreadPool(
       cpuHeavyAdd,
       cpuHeavySubtract
     );

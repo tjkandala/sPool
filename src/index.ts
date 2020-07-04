@@ -51,60 +51,57 @@ interface Handle {
 let alreadyPooled = false;
 
 // mapped tuple types didn't really work out
-export async function initThreadPool<T extends [Callback]>(
+export function initThreadPool<T extends [Callback]>(
   ...funcs: T
-): Promise<[Handle, AsyncWorkerStub<T[0]>]>;
-export async function initThreadPool<T extends [Callback, Callback]>(
+): [Handle, AsyncWorkerStub<T[0]>];
+export function initThreadPool<T extends [Callback, Callback]>(
   ...funcs: T
-): Promise<[Handle, AsyncWorkerStub<T[0]>, AsyncWorkerStub<T[1]>]>;
-export async function initThreadPool<T extends [Callback, Callback, Callback]>(
+): [Handle, AsyncWorkerStub<T[0]>, AsyncWorkerStub<T[1]>];
+export function initThreadPool<T extends [Callback, Callback, Callback]>(
   ...funcs: T
-): Promise<
-  [Handle, AsyncWorkerStub<T[0]>, AsyncWorkerStub<T[1]>, AsyncWorkerStub<T[2]>]
->;
-export async function initThreadPool<
+): [
+  Handle,
+  AsyncWorkerStub<T[0]>,
+  AsyncWorkerStub<T[1]>,
+  AsyncWorkerStub<T[2]>
+];
+export function initThreadPool<
   T extends [Callback, Callback, Callback, Callback]
 >(
   ...funcs: T
-): Promise<
-  [
-    Handle,
-    AsyncWorkerStub<T[0]>,
-    AsyncWorkerStub<T[1]>,
-    AsyncWorkerStub<T[2]>,
-    AsyncWorkerStub<T[3]>
-  ]
->;
-export async function initThreadPool<
+): [
+  Handle,
+  AsyncWorkerStub<T[0]>,
+  AsyncWorkerStub<T[1]>,
+  AsyncWorkerStub<T[2]>,
+  AsyncWorkerStub<T[3]>
+];
+export function initThreadPool<
   T extends [Callback, Callback, Callback, Callback, Callback]
 >(
   ...funcs: T
-): Promise<
-  [
-    Handle,
-    AsyncWorkerStub<T[0]>,
-    AsyncWorkerStub<T[1]>,
-    AsyncWorkerStub<T[2]>,
-    AsyncWorkerStub<T[3]>,
-    AsyncWorkerStub<T[4]>
-  ]
->;
-export async function initThreadPool<
+): [
+  Handle,
+  AsyncWorkerStub<T[0]>,
+  AsyncWorkerStub<T[1]>,
+  AsyncWorkerStub<T[2]>,
+  AsyncWorkerStub<T[3]>,
+  AsyncWorkerStub<T[4]>
+];
+export function initThreadPool<
   T extends [Callback, Callback, Callback, Callback, Callback, Callback]
 >(
   ...funcs: T
-): Promise<
-  [
-    Handle,
-    AsyncWorkerStub<T[0]>,
-    AsyncWorkerStub<T[1]>,
-    AsyncWorkerStub<T[2]>,
-    AsyncWorkerStub<T[3]>,
-    AsyncWorkerStub<T[4]>,
-    AsyncWorkerStub<T[5]>
-  ]
->;
-export async function initThreadPool<T extends [...Callback[]]>(...funcs: T) {
+): [
+  Handle,
+  AsyncWorkerStub<T[0]>,
+  AsyncWorkerStub<T[1]>,
+  AsyncWorkerStub<T[2]>,
+  AsyncWorkerStub<T[3]>,
+  AsyncWorkerStub<T[4]>,
+  AsyncWorkerStub<T[5]>
+];
+export function initThreadPool<T extends [...Callback[]]>(...funcs: T) {
   if (alreadyPooled) {
     const err = new Error('A thread pool already exists!');
     err.name = 'MultipleThreadPoolError';
@@ -193,11 +190,6 @@ export async function initThreadPool<T extends [...Callback[]]>(...funcs: T) {
       const thisWorker = idleWorkers.shift();
       if (thisWorker) {
         activeWorkers.push(thisWorker);
-        thisWorker.postMessage({
-          type: 'call',
-          fnIndex: task[0],
-          args: task[1],
-        });
 
         function cleanup(val: any) {
           // resolve promise
@@ -205,15 +197,20 @@ export async function initThreadPool<T extends [...Callback[]]>(...funcs: T) {
           if (thisWorker) {
             thisWorker?.off('message', cleanup);
             // move thread, call threadAvailable
-            handle.log();
             activeWorkers.splice(activeWorkers.indexOf(thisWorker), 1);
             idleWorkers.push(thisWorker);
-            handle.log();
+
             threadAvailable();
           }
         }
 
         thisWorker.on('message', cleanup);
+
+        thisWorker.postMessage({
+          type: 'call',
+          fnIndex: task[0],
+          args: task[1],
+        });
       }
     }
   }
