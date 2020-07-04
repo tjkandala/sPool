@@ -144,7 +144,7 @@ export async function initThreadPool<T extends [...Callback[]]>(...funcs: T) {
     parentPort.on("message", (val) => {
         switch(val.type) {
             case "call": {
-                const data = ${funcs[0]}(...val.args);
+                const data = fns[val.fnIndex](...val.args);
                 parentPort?.postMessage({ status: "received", data });
                 break;
             }
@@ -176,7 +176,7 @@ export async function initThreadPool<T extends [...Callback[]]>(...funcs: T) {
    */
   function queueTask(task: Task) {
     invocationQueue.push(task);
-    setTimeout(() => task[2]('tada'), 1500);
+    // setTimeout(() => task[2]('tada'), 1500);
     if (idleWorkers.length > 0) {
       threadAvailable();
     }
@@ -188,8 +188,20 @@ export async function initThreadPool<T extends [...Callback[]]>(...funcs: T) {
       if (task) {
         const nextWorker = idleWorkers.shift();
         if (nextWorker) {
-          nextWorker.postMessage({});
           activeWorkers.push(nextWorker);
+          nextWorker.postMessage({
+            type: 'call',
+            fnIndex: task[0],
+            args: task[1],
+          });
+
+          function cleanup(val: any) {
+            task && task[2](val);
+            nextWorker?.off('message', cleanup);
+            // move thread, call threadAvailable
+          }
+
+          nextWorker.on('message', cleanup);
         }
       }
     }
