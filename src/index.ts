@@ -36,8 +36,6 @@ import { cpus } from 'os';
 
 type Callback = (...args: any) => any;
 
-let alreadyPooled = false;
-
 type AsyncWorkerStub<T extends Callback> = {
   (...args: Parameters<T>): Promise<ReturnType<T>>;
   // kill: string;
@@ -48,6 +46,9 @@ interface Handle {
   kill: () => void;
   log: () => void;
 }
+
+/** module global variable to prevent creation of multiple thread pools */
+let alreadyPooled = false;
 
 // mapped tuple types didn't really work out
 export async function initThreadPool<T extends [Callback]>(
@@ -116,11 +117,11 @@ export async function initThreadPool<T extends [...Callback[]]>(...funcs: T) {
     throw err;
   }
 
-  // module global variable to prevent creation of multiple thread pools
   alreadyPooled = true;
 
   // this is a 2-core/4-thread processor, cpus().length is returning 4
   // seems it is accounting for hyperthreading
+  // might make threads configurable (default to available threads if first arg is falsy)
   const threads = cpus().length;
 
   const idleWorkers: Worker[] = [];
@@ -130,11 +131,9 @@ export async function initThreadPool<T extends [...Callback[]]>(...funcs: T) {
   let fnsString = '[';
   for (let i = 0; i < funcs.length; i++) {
     fnsString += funcs[i].toString();
-    fnsString += ',';
+    fnsString += ', ';
   }
   fnsString += ']';
-
-  console.log(fnsString);
 
   const workerScript = `
     const {parentPort} = require("worker_threads");
@@ -145,7 +144,7 @@ export async function initThreadPool<T extends [...Callback[]]>(...funcs: T) {
     parentPort.on("message", (val) => {
         switch(val.type) {
             case "call": {
-                const data = ${funcs[0].name}(...val.args);
+                const data = ${funcs[0]}(...val.args);
                 parentPort?.postMessage({ status: "received", data });
                 break;
             }
@@ -166,7 +165,35 @@ export async function initThreadPool<T extends [...Callback[]]>(...funcs: T) {
     );
   }
 
-  const invocationQueue: any[] = [];
+  type Resolve = (value?: any) => void;
+  type Task = [number, any, Resolve];
+
+  const invocationQueue: Task[] = [];
+
+  /**
+   *
+   * @param task [index of function, args]
+   */
+  function queueTask(task: Task) {
+    invocationQueue.push(task);
+    setTimeout(() => task[2]('tada'), 1500);
+    if (idleWorkers.length > 0) {
+      threadAvailable();
+    }
+  }
+
+  function threadAvailable() {
+    while (invocationQueue.length > 0 && idleWorkers.length > 0) {
+      const task = invocationQueue.shift();
+      if (task) {
+        const nextWorker = idleWorkers.shift();
+        if (nextWorker) {
+          nextWorker.postMessage({});
+          activeWorkers.push(nextWorker);
+        }
+      }
+    }
+  }
 
   const handle: Handle = {
     kill() {
@@ -184,7 +211,7 @@ export async function initThreadPool<T extends [...Callback[]]>(...funcs: T) {
 
   return [
     handle,
-    ...funcs.map(cb => {
+    ...funcs.map((cb, i) => {
       /**
        * 'client stub' of passed in function.
        *
@@ -196,29 +223,14 @@ export async function initThreadPool<T extends [...Callback[]]>(...funcs: T) {
       return function workerized(
         ...args: Parameters<typeof cb>
       ): Promise<ReturnType<typeof cb>> {
-        const myWorker = idleWorkers[0];
-        myWorker.postMessage({
-          type: 'replaceFunc',
-        });
-
-        invocationQueue.push(['func0', args]);
-        console.log(invocationQueue);
-
-        myWorker.postMessage({
-          type: 'call',
-          args,
-        });
+        // you may not ACTUALLY have a worker available here at this time...
+        // so I must use a different communication channel to send return value
+        // IDEA: send resolve fn to task queue.
 
         return new Promise<ReturnType<typeof cb>>(res => {
-          console.log(args);
-          res();
+          queueTask([i, args, res]);
         });
       };
     }),
   ];
 }
-
-/**
- * TODO
- */
-// class Queue<T> {}

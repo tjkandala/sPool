@@ -8,8 +8,8 @@ describe('initThreadPool', () => {
 
   it('works', async () => {
     const [handle, workerizedCpuHeavy] = await initThreadPool(cpuHeavy);
-    workerizedCpuHeavy(1, 2);
-
+    const miVal = await workerizedCpuHeavy(1, 2);
+    console.log(miVal);
     expect(true).toEqual(true);
     handle.kill();
   });
