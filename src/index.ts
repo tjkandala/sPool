@@ -157,7 +157,8 @@ export function initThreadPool<T extends [...Callback[]]>(...funcs: T) {
   }
 
   type Resolve = (value?: any) => void;
-  type Task = [number, any, Resolve];
+  type Reject = (reason?: any) => void;
+  type Task = [number, any, Resolve, Reject];
 
   const invocationQueue: Task[] = [];
 
@@ -245,8 +246,8 @@ export function initThreadPool<T extends [...Callback[]]>(...funcs: T) {
       ): Promise<ReturnType<typeof cb>> {
         // TODO: handle rej
 
-        return new Promise<ReturnType<typeof cb>>(res => {
-          queueTask([i, args, res]);
+        return new Promise<ReturnType<typeof cb>>((res, rej) => {
+          queueTask([i, args, res, rej]);
         });
       };
     }),
