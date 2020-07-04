@@ -220,11 +220,11 @@ export async function initThreadPool<T extends [...Callback[]]>(...funcs: T) {
 
   const handle: Handle = {
     kill() {
-      for (let i = 0; i < idleWorkers.length; i++) {
-        idleWorkers[i].terminate();
+      while (idleWorkers.length) {
+        idleWorkers.pop()?.terminate();
       }
-      for (let i = 0; i < activeWorkers.length; i++) {
-        activeWorkers[i].terminate();
+      while (activeWorkers.length) {
+        activeWorkers.pop()?.terminate;
       }
       // allow the user to create another thread pool now
       alreadyPooled = false;
