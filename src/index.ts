@@ -9,29 +9,23 @@ import { cpus } from 'os';
  * - make it isomorphic! (compat w Web Workers & Node.js Workers)? optional
  * - benchmark against single-threaded impls
  * - error handling (check stack trace)
- * - abortable
- * - use SharedArrayBuffer!
- * - finally, demonstrate a real-world use-case! (load testing?????)
  * - solve dining philosophers problem in sPool! the only node solution I found uses clusters, not workers!
  *
  * NOTEs:
- * - don't make an overloaded main function! separate api for function and for files... wait nvm. might be more elegant to overload
  * - cool perks! no syncronization needed bc no shared address space/memory
  *
  * final steps: read all of mraleph, optimize perf
  *
  * Tradeoffs:
- * - duplicating function definitions in all threads
  * - can't reference enclosing scopes in functions
- * - have to pass in functions at creation time
+ * - have to pass in functions at initialization time
  *
  * References:
  * https://www.ibm.com/developerworks/java/library/j-jtp0730/index.html
  *
  * Why?
  *  - I was a little exhausted from constantly code-golfing for front-end libraries. On Node.js libraries,
- *    I can focus on API design and runtime performance, without bundle size getting in the way. no worries
- * about RegeneratorRuntime
+ *    I can focus on API design and runtime performance, without bundle size getting in the way
  */
 
 type Callback = (...args: any) => any;
@@ -193,7 +187,7 @@ export function initThreadPool<T extends [...Callback[]]>(...funcs: T) {
 
         function cleanup(val: any) {
           // resolve promise
-          task && task[2](val);
+          task && task[2](val.data);
           if (thisWorker) {
             thisWorker?.off('message', cleanup);
             // move thread, call threadAvailable
@@ -249,9 +243,7 @@ export function initThreadPool<T extends [...Callback[]]>(...funcs: T) {
       return function workerized(
         ...args: Parameters<typeof cb>
       ): Promise<ReturnType<typeof cb>> {
-        // you may not ACTUALLY have a worker available here at this time...
-        // so I must use a different communication channel to send return value
-        // IDEA: send resolve fn to task queue.
+        // TODO: handle rej
 
         return new Promise<ReturnType<typeof cb>>(res => {
           queueTask([i, args, res]);

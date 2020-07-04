@@ -16,11 +16,12 @@ describe('initThreadPool', () => {
       cpuHeavyAdd,
       cpuHeavySubtract
     );
-    const miVal = await workerizedAdd(1, 2);
+    const firVal = await workerizedAdd(1, 2);
     const secVal = await workerizedSubtract(1, 2);
-    console.log(miVal);
-    console.log(secVal);
-    expect(true).toEqual(true);
+
+    expect(firVal).toBe(3);
+    expect(secVal).toBe(-1);
+
     handle.kill();
   });
 
