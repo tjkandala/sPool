@@ -17,7 +17,7 @@ import { cpus } from 'os';
  * final steps: read all of mraleph, optimize perf
  *
  * Tradeoffs:
- * - can't reference enclosing scopes in functions
+ * - can't reference enclosing scopes in functions. no closure unlike e.g. anonymous goroutines
  * - have to pass in functions at initialization time
  *
  * References:
